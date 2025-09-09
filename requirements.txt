@@ -1,0 +1,10 @@
+fastapi
+uvicorn[standard]
+python-dotenv
+langchain-core
+langchain-qdrant
+langchain-mistralai
+mistralai
+qdrant-client
+pydantic>=2
+EOF
