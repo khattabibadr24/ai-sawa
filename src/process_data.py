@@ -11,7 +11,7 @@ def load_and_chunk_data(file_path: str):
 
     all_chunks = []
     text_splitter = RecursiveCharacterTextSplitter(
-        chunk_size=1000,
+        chunk_size=500,
         chunk_overlap=200,
         length_function=len,
         add_start_index=True,
