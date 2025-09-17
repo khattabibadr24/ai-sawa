@@ -19,16 +19,17 @@ from qdrant_client import QdrantClient, models
 from qdrant_client.http.exceptions import UnexpectedResponse
 
 from core.config import (
-    API_KEY, COLLECTION_NAME, QDRANT_LOCAL_PATH, 
+    API_KEY, COLLECTION_NAME, 
     RECREATE_COLLECTION, log, K
 )
 
 from core.process_data import load_and_chunk_data
 
-def get_local_qdrant_client() -> QdrantClient:
-    os.makedirs(QDRANT_LOCAL_PATH, exist_ok=True)
-    log(f"[qdrant] Path local: {QDRANT_LOCAL_PATH}")
-    return QdrantClient(path=QDRANT_LOCAL_PATH)   # mode local (persistant)
+def get_qdrant_client() -> QdrantClient:
+    # Use Docker Qdrant only
+    qdrant_url = os.getenv("QDRANT_URL", "http://qdrant:6333")
+    log(f"[qdrant] Connexion au serveur Qdrant Docker: {qdrant_url}")
+    return QdrantClient(url=qdrant_url)
 
 def _ensure_collection(client: QdrantClient, embeddings: MistralAIEmbeddings):
     if RECREATE_COLLECTION and client.collection_exists(collection_name=COLLECTION_NAME):
@@ -66,8 +67,8 @@ def create_and_save_vector_db(chunks):
     log("[embeddings] Initialisation MistralAIEmbeddings…")
     embeddings = MistralAIEmbeddings(mistral_api_key=API_KEY, model="mistral-embed")
 
-    log("[qdrant] Initialisation client local…")
-    client = get_local_qdrant_client()
+    log("[qdrant] Initialisation client Qdrant…")
+    client = get_qdrant_client()
     _ensure_collection(client, embeddings)
 
     log("[vectorstore] Création du QdrantVectorStore…")
@@ -98,7 +99,7 @@ def load_vector_db():
         raise ValueError("API_KEY non trouvée dans .env (doit contenir la clé Mistral).")
 
     embeddings = MistralAIEmbeddings(mistral_api_key=API_KEY, model="mistral-embed")
-    client = get_local_qdrant_client()
+    client = get_qdrant_client()
 
     if not client.collection_exists(collection_name=COLLECTION_NAME):
         raise FileNotFoundError(
@@ -106,7 +107,7 @@ def load_vector_db():
             f"Lance d'abord create_and_save_vector_db(chunks)."
         )
 
-    log("[vectorstore] Chargement de la base Qdrant locale…")
+    log("[vectorstore] Chargement de la base Qdrant…")
     return Qdrant(client=client, collection_name=COLLECTION_NAME, embedding=embeddings)
 
 def get_retriever():

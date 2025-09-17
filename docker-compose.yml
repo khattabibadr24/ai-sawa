@@ -1,0 +1,41 @@
+version: "3.8"
+
+networks:
+  main-network:
+    name: main-network
+    external: false
+    driver: bridge
+
+services:
+  sawa:
+    image: sawa-ai
+    container_name: sawa_container
+    build: "."
+    env_file:
+      - .env
+    ports:
+      - "8000:8000"
+    volumes:
+      - .:/app
+    depends_on:
+      - qdrant
+    networks:
+      - main-network
+
+  qdrant:
+    image: qdrant/qdrant:latest
+    container_name: qdrant_container
+    restart: always
+    ports:
+      - "6333:6333"
+      - "6334:6334"
+    volumes:
+      - qdrant_data:/qdrant/storage
+    networks:
+      - main-network
+    environment:
+      - QDRANT__SERVICE__HTTP_PORT=6333
+      - QDRANT__SERVICE__GRPC_PORT=6334
+
+volumes:
+  qdrant_data:

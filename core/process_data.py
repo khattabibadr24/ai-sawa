@@ -188,4 +188,5 @@ if __name__ == "__main__":
         print(f"\nChunk {i+1}:")
         print(f"  ID: {doc.metadata.get('chunk_id')}")
         print(f"  start_index: {doc.metadata.get('start_index')}, end_index: {doc.metadata.get('end_index')}")
-        print(f"  Aperçu: {doc.page_content[:120].replace('\\n',' ')}...")
+        preview = doc.page_content[:120].replace('\n', ' ')
+        print(f"  Aperçu: {preview}...")

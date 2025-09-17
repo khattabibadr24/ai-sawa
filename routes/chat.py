@@ -18,8 +18,9 @@ from services.vector_db_service import get_retriever
 # Initialize router
 router = APIRouter()
 
-# Initialize retriever
-retriever = get_retriever()
+# Lazy-loaded retriever
+def get_retriever_instance():
+    return get_retriever()
 
 @router.post("/chat", response_model=ChatResponse)
 async def chat(req: ChatRequest):
@@ -41,7 +42,7 @@ async def chat(req: ChatRequest):
     payload = {"question": q, "chat_history": msgs}
 
     async with SEMAPHORE:
-        answer = generate_with_fallback(payload, retriever)
+        answer = generate_with_fallback(payload, get_retriever_instance())
 
     append_server_history(req.session_id, q, answer, MAX_TURNS)
     return ChatResponse(answer=answer)
@@ -89,7 +90,7 @@ async def chat_stream(
             for m in FALLBACK_MODELS:
                 tried_any = True
                 try:
-                    chain = build_chain_for(m, retriever)
+                    chain = build_chain_for(m, get_retriever_instance())
                     for chunk in chain.stream(payload):
                         # stream() renvoie des morceaux de texte (str)
                         acc.append(chunk)

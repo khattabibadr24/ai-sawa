@@ -26,7 +26,6 @@ MAX_TURNS = int(os.getenv("MAX_TURNS", "8"))  # nombre de tours (user+assistant)
 
 # --- Vector Database Configuration ---
 COLLECTION_NAME = os.getenv("QDRANT_COLLECTION", "medical_data_collection")
-QDRANT_LOCAL_PATH = os.getenv("QDRANT_LOCAL_PATH", "/home/khattabi/Desktop/qdrant_local")
 RECREATE_COLLECTION = os.getenv("RECREATE_COLLECTION", "0") in ("1", "true", "True")
 
 # --- Debug Configuration ---

@@ -1,4 +1,5 @@
 from fastapi import FastAPI
+from contextlib import asynccontextmanager
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.responses import JSONResponse
 
@@ -6,8 +7,20 @@ from core.config import (
     K, TEMPERATURE, MODEL_NAME, MAX_CONCURRENCY, MAX_TURNS
 )
 from routes.chat import router as chat_router
+from scripts.init_vector_db import init_vector_database
 
-app = FastAPI(title="AI-SAWA Chatbot", version="2.0.0")
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    try:
+        print("initializing Vector database Qdrant...")
+        init_vector_database()
+        print("✅ Vector database initialized successfully")
+    except Exception as e:
+        print(f"❌ Error initializing vector database: {e}")
+    
+    yield
+
+app = FastAPI(title="AI-SAWA Chatbot", version="2.0.0", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
