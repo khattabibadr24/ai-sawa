@@ -1,6 +1,10 @@
+import os
+import warnings
+import uuid
+from pathlib import Path
+
 # --- CPU ONLY & silence CUDA warnings (doit être AVANT tout import torch/sentence-transformers) ---
-import os, warnings
-os.environ.setdefault("CUDA_VISIBLE_DEVICES", "")  # masque les GPU pour PyTorch
+os.environ.setdefault("CUDA_VISIBLE_DEVICES", "")
 warnings.filterwarnings(
     "ignore",
     message="CUDA initialization",
@@ -8,34 +12,18 @@ warnings.filterwarnings(
     module="torch.cuda",
 )
 
-from pathlib import Path
-from dotenv import load_dotenv
-
-# --- Debug flag ---
-DEBUG = os.getenv("DEBUG", "1") not in ("0", "false", "False")
-
-def log(*args):
-    if DEBUG:
-        print(*args)
-
-# --- Paths & env ---
-PROJECT_ROOT = Path(__file__).resolve().parents[1]  # dossier AI-sawa
-ENV_PATH = PROJECT_ROOT / ".env"
-load_dotenv(ENV_PATH, override=True)
-
-API_KEY = os.getenv("API_KEY")  # doit être la clé Mistral
-COLLECTION_NAME = os.getenv("QDRANT_COLLECTION", "medical_data_collection")
-QDRANT_LOCAL_PATH = os.getenv("QDRANT_LOCAL_PATH", "/home/khattabi/Desktop/qdrant_local")
-RECREATE_COLLECTION = os.getenv("RECREATE_COLLECTION", "0") in ("1", "true", "True")
-
 # --- Imports qui peuvent tirer torch après qu'on ait forcé le CPU ---
 from langchain_mistralai import MistralAIEmbeddings
 from langchain_qdrant import QdrantVectorStore as Qdrant
 from qdrant_client import QdrantClient, models
 from qdrant_client.http.exceptions import UnexpectedResponse
-from process_data import load_and_chunk_data  # ton chunking sémantique
 
-import uuid
+from core.config import (
+    API_KEY, COLLECTION_NAME, QDRANT_LOCAL_PATH, 
+    RECREATE_COLLECTION, log, K
+)
+
+from core.process_data import load_and_chunk_data
 
 def get_local_qdrant_client() -> QdrantClient:
     os.makedirs(QDRANT_LOCAL_PATH, exist_ok=True)
@@ -121,14 +109,18 @@ def load_vector_db():
     log("[vectorstore] Chargement de la base Qdrant locale…")
     return Qdrant(client=client, collection_name=COLLECTION_NAME, embedding=embeddings)
 
-if __name__ == "__main__":
-    json_file_path = PROJECT_ROOT / "data" / "medical_data.json"
-    if not json_file_path.exists():
+def get_retriever():
+    vector_db = load_vector_db()
+    return vector_db.as_retriever(search_kwargs={"k": K})
+
+def initialize_vector_db_from_data(json_file_path: str):
+    if not Path(json_file_path).exists():
         raise FileNotFoundError(f"Fichier introuvable: {json_file_path}")
 
     log(f"[main] Lecture: {json_file_path}")
-    chunks = load_and_chunk_data(str(json_file_path))  # active les prints de chunking
-    print(f"Total chunks prêts à indexer: {len(chunks)}")
+    chunks = load_and_chunk_data(str(json_file_path))
+    log(f"Total chunks prêts à indexer: {len(chunks)}")
 
     vector_db = create_and_save_vector_db(chunks)
-    print("Vector DB prête.")
+    log("Vector DB prête.")
+    return vector_db

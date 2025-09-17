@@ -174,14 +174,14 @@ def load_and_chunk_data(
 
 
 if __name__ == "__main__":
-    # Exemple d’utilisation
+    # Exemple d'utilisation
     json_file_path = "/home/khattabi/Desktop/AI-sawa/data/medical_data.json"
     chunks = load_and_chunk_data(
         json_file_path,
         model_name="sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2",
         max_chars=900,          # taille max d'un chunk (approx chars)
         min_chars=200,          # taille min; fusionne les trop petits
-        similarity_threshold=0.72,  # plus haut = segments plus “cohérents”, plus nombreux
+        similarity_threshold=0.72,  # plus haut = segments plus "cohérents", plus nombreux
     )
     print(f"Nombre total de chunks générés : {len(chunks)}")
     for i, doc in enumerate(chunks[:5]):
