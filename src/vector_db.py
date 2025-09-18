@@ -33,7 +33,7 @@ from langchain_mistralai import MistralAIEmbeddings
 from langchain_qdrant import QdrantVectorStore as Qdrant
 from qdrant_client import QdrantClient, models
 from qdrant_client.http.exceptions import UnexpectedResponse
-from process_data import load_and_chunk_data  # ton chunking sémantique
+from process_data import load_and_chunk_data_with_openai_embeddings  # ton chunking sémantique
 
 import uuid
 
@@ -127,7 +127,7 @@ if __name__ == "__main__":
         raise FileNotFoundError(f"Fichier introuvable: {json_file_path}")
 
     log(f"[main] Lecture: {json_file_path}")
-    chunks = load_and_chunk_data(str(json_file_path))  # active les prints de chunking
+    chunks = load_and_chunk_data_with_openai_embeddings(str(json_file_path))  # active les prints de chunking
     print(f"Total chunks prêts à indexer: {len(chunks)}")
 
     vector_db = create_and_save_vector_db(chunks)
