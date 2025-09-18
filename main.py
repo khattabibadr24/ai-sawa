@@ -8,15 +8,22 @@ from core.config import (
 )
 from routes.chat import router as chat_router
 from scripts.init_vector_db import init_vector_database
+from services.vector_db_service import get_retriever
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     try:
-        print("initializing Vector database Qdrant...")
-        init_vector_database()
-        print("✅ Vector database initialized successfully")
+        # print("🚀 Initializing Vector database Qdrant...")
+        # init_vector_database()
+        # print("✅ Vector database initialized successfully")
+        
+        print("🔍 Initializing retriever for questions...")
+        get_retriever()
+        print("✅ Retriever ready for questions")
+        
     except Exception as e:
-        print(f"❌ Error initializing vector database: {e}")
+        print(f"❌ Error during startup: {e}")
+        raise
     
     yield
 

@@ -25,10 +25,10 @@ from core.config import (
 
 from core.process_data import load_and_chunk_data
 
+_retriever_instance = None
+
 def get_qdrant_client() -> QdrantClient:
-    # Use Docker Qdrant only
     qdrant_url = os.getenv("QDRANT_URL", "http://qdrant:6333")
-    log(f"[qdrant] Connexion au serveur Qdrant Docker: {qdrant_url}")
     return QdrantClient(url=qdrant_url)
 
 def _ensure_collection(client: QdrantClient, embeddings: MistralAIEmbeddings):
@@ -104,20 +104,22 @@ def load_vector_db():
     if not client.collection_exists(collection_name=COLLECTION_NAME):
         raise FileNotFoundError(
             f"La collection '{COLLECTION_NAME}' n'existe pas. "
-            f"Lance d'abord create_and_save_vector_db(chunks)."
+            f"Assure-toi que la base vectorielle a été initialisée."
         )
 
-    log("[vectorstore] Chargement de la base Qdrant…")
     return Qdrant(client=client, collection_name=COLLECTION_NAME, embedding=embeddings)
 
 def get_retriever():
-    vector_db = load_vector_db()
-    return vector_db.as_retriever(search_kwargs={"k": K})
+    global _retriever_instance
+    if _retriever_instance is None:
+        vector_db = load_vector_db()
+        _retriever_instance = vector_db.as_retriever(search_kwargs={"k": K})
+    return _retriever_instance
 
 def initialize_vector_db_from_data(json_file_path: str):
     if not Path(json_file_path).exists():
         raise FileNotFoundError(f"Fichier introuvable: {json_file_path}")
-
+    
     log(f"[main] Lecture: {json_file_path}")
     chunks = load_and_chunk_data(str(json_file_path))
     log(f"Total chunks prêts à indexer: {len(chunks)}")
