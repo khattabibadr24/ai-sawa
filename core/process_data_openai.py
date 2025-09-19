@@ -1,9 +1,7 @@
 import json
-import numpy as np
 from typing import List, Dict, Any, Tuple
 import time
 import os
-import locale
 from openai import OpenAI
 from dotenv import load_dotenv
 from pathlib import Path
@@ -12,27 +10,6 @@ from pathlib import Path
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 ENV_PATH = PROJECT_ROOT / ".env"
 load_dotenv(ENV_PATH, override=True)
-# Ajoutez ceci temporairement au début du main (après les imports)
-print("🔍 DIAGNOSTIC FICHIER .ENV:")
-import os
-print(f"📁 Répertoire courant: {os.getcwd()}")
-print(f"📄 Fichier .env existe? {os.path.exists('../.env')}")
-print(f"📄 Contenu du répertoire parent: {os.listdir('..')}")
-
-# Test de chargement
-from dotenv import load_dotenv
-result = load_dotenv(dotenv_path="../.env")
-print(f"✅ Chargement .env réussi: {result}")
-print(f"🔑 OPENAI_API_KEY trouvée: {'Oui' if os.getenv('OPENAI_API_KEY') else 'Non'}")
-
-# Configurer l'encodage par défaut pour éviter les problèmes
-try:
-    locale.setlocale(locale.LC_ALL, 'en_US.UTF-8')
-except locale.Error:
-    try:
-        locale.setlocale(locale.LC_ALL, 'C.UTF-8')
-    except locale.Error:
-        pass  # Utiliser les paramètres par défaut
 
 # Compatibilité LangChain (anciens/nouveaux imports)
 try:
@@ -86,89 +63,6 @@ def initialize_openai_client(api_key: str = None) -> Tuple[OpenAI, Dict[str, Any
     return client, model_config
 
 
-def analyze_json_data(file_path: str) -> Dict[str, Any]:
-    """
-    Analyse complète du fichier JSON pour diagnostiquer les documents manquants.
-    """
-    try:
-        with open(file_path, "r", encoding="utf-8") as f:
-            data = json.load(f)
-    except UnicodeDecodeError:
-        print("⚠️  Erreur d'encodage UTF-8, tentative avec latin-1...")
-        with open(file_path, "r", encoding="latin-1") as f:
-            data = json.load(f)
-    except Exception as e:
-        print(f"❌ Erreur lecture fichier {file_path}: {e}")
-        raise
-    
-    total_docs = len(data)
-    empty_content = 0
-    missing_content = 0
-    missing_id = 0
-    valid_docs = 0
-    content_lengths = []
-    
-    empty_ids = []
-    missing_content_ids = []
-    missing_id_indices = []
-    very_short_content = []  # < 10 caractères
-    
-    for i, item in enumerate(data):
-        doc_id = item.get("id")
-        content = item.get("content")
-        
-        # Vérifier l'ID
-        if doc_id is None or doc_id == "":
-            missing_id += 1
-            missing_id_indices.append(i)
-            continue
-            
-        # Vérifier le contenu
-        if content is None:
-            missing_content += 1
-            missing_content_ids.append(doc_id)
-            continue
-            
-        content_clean = content.strip() if isinstance(content, str) else str(content).strip()
-        
-        # Nettoyage supplémentaire pour éviter les problèmes d'encodage
-        if content_clean:
-            try:
-                # Nettoyer les caractères de contrôle
-                content_clean = content_clean.replace('\x00', ' ')
-                content_clean = content_clean.replace('\r\n', '\n').replace('\r', '\n')
-                # Vérifier que c'est encodable en UTF-8
-                content_clean.encode('utf-8')
-            except UnicodeEncodeError:
-                # Si problème d'encodage, nettoyer davantage
-                content_clean = content_clean.encode('utf-8', errors='ignore').decode('utf-8')
-        
-        if not content_clean:
-            empty_content += 1
-            empty_ids.append(doc_id)
-        elif len(content_clean) < 10:  # Très court
-            very_short_content.append((doc_id, len(content_clean), content_clean[:50]))
-            valid_docs += 1  # On garde quand même les très courts
-            content_lengths.append(len(content_clean))
-        else:
-            valid_docs += 1
-            content_lengths.append(len(content_clean))
-    
-    return {
-        "total_docs": total_docs,
-        "valid_docs": valid_docs,
-        "empty_content": empty_content,
-        "missing_content": missing_content,
-        "missing_id": missing_id,
-        "very_short_content": len(very_short_content),
-        "empty_ids": empty_ids[:10],
-        "missing_content_ids": missing_content_ids[:10], 
-        "missing_id_indices": missing_id_indices[:10],
-        "very_short_examples": very_short_content[:5],
-        "avg_content_length": sum(content_lengths) / len(content_lengths) if content_lengths else 0,
-        "min_content_length": min(content_lengths) if content_lengths else 0,
-        "max_content_length": max(content_lengths) if content_lengths else 0,
-    }
 
 
 def get_openai_embeddings_batch(
@@ -276,8 +170,7 @@ def load_and_chunk_data_with_openai_embeddings(
     file_path: str,
     openai_api_key: str = None,
     min_content_length: int = 5,
-    batch_size: int = 50,
-    estimate_cost: bool = True
+    batch_size: int = 50
 ) -> List[Document]:
     """
     Version avec embeddings OpenAI configuré via .env.
@@ -287,7 +180,6 @@ def load_and_chunk_data_with_openai_embeddings(
         openai_api_key: Clé API OpenAI (ou None pour fichier .env)
         min_content_length: Longueur minimale du contenu (caractères)
         batch_size: Taille des lots pour les requêtes API
-        estimate_cost: Afficher l'estimation du coût
     """
     try:
         with open(file_path, "r", encoding="utf-8") as f:
@@ -356,24 +248,6 @@ def load_and_chunk_data_with_openai_embeddings(
         print("❌ Aucun document valide trouvé!")
         return all_docs
 
-    # Estimation du coût
-    if estimate_cost:
-        # Estimation approximative (1 token ≈ 4 caractères pour l'anglais/français)
-        total_chars = sum(len(text) for text in contexts)
-        estimated_tokens = total_chars // 4
-        estimated_cost = (estimated_tokens / 1000) * model_config["price_per_1k"]
-        
-        print(f"💰 ESTIMATION DU COÛT:")
-        print(f"   • Caractères totaux: {total_chars:,}")
-        print(f"   • Tokens estimés: {estimated_tokens:,}")
-        print(f"   • Coût estimé: ${estimated_cost:.4f}")
-        
-        if estimated_cost > 1.0:
-            confirmation = input("⚠️  Coût > $1. Continuer? (y/n): ")
-            if confirmation.lower() != 'y':
-                print("❌ Arrêt sur demande utilisateur")
-                return all_docs
-
     # Génération des embeddings via OpenAI
     try:
         embeddings = get_openai_embeddings_batch(
@@ -415,114 +289,29 @@ def load_and_chunk_data_with_openai_embeddings(
     return all_docs
 
 
-def save_embeddings_to_file(docs: List[Document], output_path: str):
-    """
-    Sauvegarde les embeddings dans un fichier JSON pour réutilisation.
-    """
-    data_to_save = []
-    for doc in docs:
-        data_to_save.append({
-            "chunk_id": doc.metadata["chunk_id"],
-            "source": doc.metadata["source"], 
-            "content": doc.page_content,
-            "embedding": doc.metadata["embedding"],
-            "metadata": {k: v for k, v in doc.metadata.items() if k != "embedding"}
-        })
-    
-    with open(output_path, "w", encoding="utf-8") as f:
-        json.dump(data_to_save, f, ensure_ascii=False, indent=2)
-    
-    print(f"💾 Embeddings sauvegardés dans: {output_path}")
 
 
 if __name__ == "__main__":
-    # ============= DIAGNOSTIC D'ENCODAGE =============
-    print("🔍 DIAGNOSTIC D'ENCODAGE SYSTÈME")
-    print("=" * 50)
-    
-    print(f"📊 Encodage par défaut: {locale.getpreferredencoding()}")
-    print(f"🌍 Locale: {locale.getlocale()}")
-    
-    # Test d'encodage avec caractères français
-    test_text = "Médecine française avec accents: àáâãäåæçèéêëìíîï"
-    try:
-        test_text.encode('utf-8')
-        print(f"✅ Test UTF-8 réussi: {test_text[:30]}...")
-    except UnicodeEncodeError as e:
-        print(f"❌ Erreur UTF-8: {e}")
-    
-    json_file_path = "/home/khattabi/Desktop/AI-sawa/data/medical_data.json"
-    
-    # Alternative: chemin relatif depuis src/
-    # json_file_path = "../data/medical_data.json"
-    
-    # ============= ANALYSE PRÉLIMINAIRE =============
-    print("🔍 ANALYSE PRÉLIMINAIRE DES DONNÉES")
-    print("=" * 50)
-    
-    analysis = analyze_json_data(json_file_path)
-    
-    print(f"📊 Documents totaux dans le JSON: {analysis['total_docs']}")
-    print(f"✅ Documents potentiellement valides: {analysis['valid_docs']}")
-    print(f"❌ Documents avec contenu vide: {analysis['empty_content']}")
-    print(f"❌ Documents sans champ 'content': {analysis['missing_content']}")
-    print(f"❌ Documents sans ID: {analysis['missing_id']}")
-    print(f"⚠️  Documents très courts (< 10 car): {analysis['very_short_content']}")
-    print(f"📏 Longueur moyenne du contenu: {analysis['avg_content_length']:.0f} caractères")
-    print(f"📏 Longueur min/max: {analysis['min_content_length']} / {analysis['max_content_length']}")
-    
-    if analysis['empty_ids']:
-        print(f"🔍 Exemples d'IDs avec contenu vide: {analysis['empty_ids']}")
-    if analysis['missing_content_ids']:
-        print(f"🔍 Exemples d'IDs sans contenu: {analysis['missing_content_ids']}")
-    if analysis['very_short_examples']:
-        print(f"🔍 Exemples de contenus très courts:")
-        for doc_id, length, preview in analysis['very_short_examples']:
-            print(f"     ID {doc_id}: {length} car -> '{preview}'")
-    
-    # ============= GÉNÉRATION DES EMBEDDINGS OPENAI =============
-    print("\n🚀 GÉNÉRATION DES EMBEDDINGS OPENAI")
-    print("=" * 50)
-    print("🤖 Utilisation du modèle: text-embedding-3-large (configuré via .env)")
-    print("📐 Dimensions: 3072 | 💰 Prix: $0.00013/1k tokens")
+    # Test simple pour vérifier le fonctionnement
+    json_file_path = "data/medical_data.json"
     
     try:
-        # Génération des embeddings avec OpenAI (modèle configuré via .env)
+        print("🚀 Test de génération des embeddings OpenAI")
         chunks_with_embeddings = load_and_chunk_data_with_openai_embeddings(
             json_file_path,
-            # openai_api_key="sk-...",  # Optionnel si .env configuré
             min_content_length=10,
-            batch_size=50,  # Optimisé pour text-embedding-3-large
-            estimate_cost=True
+            batch_size=50
         )
         
-        print(f"\n✅ SUCCÈS: {len(chunks_with_embeddings)} chunks avec embeddings générés!")
+        print(f"✅ Succès: {len(chunks_with_embeddings)} documents avec embeddings générés!")
         
-        # ============= STATISTIQUES FINALES =============
-        print(f"\n📈 STATISTIQUES FINALES:")
-        print(f"   • Documents originaux: {analysis['total_docs']}")
-        print(f"   • Documents avec embeddings: {len(chunks_with_embeddings)}")
-        print(f"   • Documents exclus: {analysis['total_docs'] - len(chunks_with_embeddings)}")
-        
-        # Exemples des premiers chunks
-        print(f"\n📄 EXEMPLES DE CHUNKS:")
-        for i, doc in enumerate(chunks_with_embeddings[:3]):
-            print(f"\nChunk {i+1}:")
-            print(f"  📋 ID: {doc.metadata.get('chunk_id')}")
-            print(f"  🏷️  Source: {doc.metadata.get('source')}")
-            print(f"  📏 Taille: {doc.metadata.get('total_chars')} caractères")
-            print(f"  🧠 Modèle: {doc.metadata.get('embedding_model')} ({doc.metadata.get('provider')})")
-            print(f"  📐 Dimensions: {doc.metadata.get('embedding_dimensions')}")
-            preview = doc.page_content[:120].replace('\n', ' ').replace('\r', ' ')
-            print(f"  👀 Aperçu: {preview}...")
-        
-        # Optionnel: sauvegarder les embeddings
-        # save_embeddings_to_file(chunks_with_embeddings, "openai_embeddings_output.json")
+        # Exemple du premier chunk
+        if chunks_with_embeddings:
+            doc = chunks_with_embeddings[0]
+            print(f"📋 Premier chunk - ID: {doc.metadata.get('chunk_id')}")
+            print(f"🧠 Modèle: {doc.metadata.get('embedding_model')}")
+            print(f"📐 Dimensions: {doc.metadata.get('embedding_dimensions')}")
         
     except Exception as e:
-        print(f"❌ ERREUR: {e}")
-        print("💡 Vérifiez:")
-        print("   • Votre fichier .env avec:")
-        print("     OPENAI_API_KEY=sk-proj-...")
-        print("     OPENAI_EMBEDDING_MODEL=text-embedding-3-large")
-        print("   • Votre installation: pip install openai python-dotenv")
+        print(f"❌ Erreur: {e}")
+        print("💡 Vérifiez votre fichier .env avec OPENAI_API_KEY")
