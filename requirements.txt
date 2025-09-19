@@ -10,3 +10,4 @@ langchain-mistralai==0.2.11
 mistralai==1.9.10
 qdrant-client==1.15.1
 sentence_transformers==5.1.0
+pymongo==4.10.1

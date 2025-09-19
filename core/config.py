@@ -28,17 +28,13 @@ MAX_TURNS = int(os.getenv("MAX_TURNS", "8"))  # nombre de tours (user+assistant)
 COLLECTION_NAME = os.getenv("QDRANT_COLLECTION", "medical_data_collection")
 RECREATE_COLLECTION = os.getenv("RECREATE_COLLECTION", "0") in ("1", "true", "True")
 
+# --- MongoDB Configuration ---
+MONGODB_URL = os.getenv("MONGODB_URL", "mongodb://mongo:mongo@mongodb:27017/sawa_db?authSource=admin")
+MONGODB_DATABASE = os.getenv("MONGODB_DATABASE", "sawa_db")
+
 # --- Debug Configuration ---
 DEBUG = os.getenv("DEBUG", "1") not in ("0", "false", "False")
 
 def log(*args):
     if DEBUG:
         print(*args)
-
-def require_api_key():
-    from fastapi import HTTPException
-    if not API_KEY:
-        raise HTTPException(
-            status_code=500,
-            detail="Clé Mistral absente. Définis API_KEY ou MISTRAL_API_KEY dans le .env."
-        )

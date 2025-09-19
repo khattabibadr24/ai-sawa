@@ -19,6 +19,7 @@ services:
       - .:/app
     depends_on:
       - qdrant
+      - mongodb
     networks:
       - main-network
 
@@ -37,5 +38,21 @@ services:
       - QDRANT__SERVICE__HTTP_PORT=6333
       - QDRANT__SERVICE__GRPC_PORT=6334
 
+  mongodb:
+    image: mongo
+    container_name: mongodb_container
+    restart: always
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongodb_data:/data/db
+    networks:
+      - main-network
+    environment:
+      - MONGO_INITDB_ROOT_USERNAME=mongo
+      - MONGO_INITDB_ROOT_PASSWORD=mongo
+      - MONGO_INITDB_DATABASE=sawa_db
+
 volumes:
   qdrant_data:
+  mongodb_data:

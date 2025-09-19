@@ -7,7 +7,6 @@ from core.config import (
     K, TEMPERATURE, MODEL_NAME, MAX_CONCURRENCY, MAX_TURNS
 )
 from routes.chat import router as chat_router
-from scripts.init_vector_db import init_vector_database
 from services.vector_db_service import get_retriever
 
 @asynccontextmanager

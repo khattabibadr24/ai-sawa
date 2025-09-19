@@ -1,153 +1,125 @@
-import re
-import httpx
-from typing import Optional, Dict
-from fastapi import HTTPException
-
+from typing import List
 from langchain_mistralai import ChatMistralAI
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
-from langchain_core.output_parsers import StrOutputParser
-from langchain_core.runnables import RunnablePassthrough, RunnableLambda
+from langchain_core.messages import BaseMessage
 
-from core.config import API_KEY, TEMPERATURE, FALLBACK_MODELS, require_api_key
+from core.config import API_KEY, TEMPERATURE, FALLBACK_MODELS
+from core.models import IntentionResponse
+from core.tools import get_history, save_interaction, search_qdrant
 
-# === Réponses fixes EXACTES ===
-SALUTATION_REPLY = "Bonjour, comment puis-je vous aider ?"
-GOODBYE_REPLY = "Merci au revoir"
-WHOAMI_REPLY = (
-    "Bonjour, je suis votre  SAWACARE AI CareManager, votre assistant intelligent dédié à l'aidance. "
-    "Je combine technologie et bienveillance pour vous aider à mieux gérer vos responsabilités d'aidant, "
-    "à trouver rapidement des réponses fiables et à bénéficier d'un accompagnement continu et personnalisé."
-)
-
-# Détection (priorité : AU REVOIR > QUI ÊTES-VOUS > SALUTATIONS)
-GOODBYE_RE = re.compile(r"\b(au revoir|bonne (journée|soirée|nuit)|à bientôt|à plus|merci|bye|ciao|tchao|see you|take care)\b", re.I)
-WHOAMI_RE = re.compile(r"(vous ?êtes qui|qui ?êtes[- ]?vous|t.?es qui|tu es qui|c.?est quoi ce bot|who are you)", re.I)
-HELLO_RE = re.compile(r"^\s*(bonjour|salut|hello|hi|hey|coucou|salam|bonsoir)\b", re.I)
-
-def shortcut_reply(user_text: str) -> Optional[str]:
-    t = (user_text or "").strip()
-    if not t:
-        return None
-    if GOODBYE_RE.search(t):
-        return GOODBYE_REPLY
-    if WHOAMI_RE.search(t):
-        return WHOAMI_REPLY
-    if HELLO_RE.search(t):
-        return SALUTATION_REPLY
-    return None
-
-# --- LLM Factory ---
-def make_llm(model_name: str) -> ChatMistralAI:
+def make_llm(model_name: str = None) -> ChatMistralAI:
+    model = model_name or FALLBACK_MODELS[0]
     return ChatMistralAI(
         mistral_api_key=API_KEY,
-        model=model_name,
+        model=model,
         temperature=TEMPERATURE,
-        max_retries=1,  # on gère nous-mêmes le fallback
+        max_retries=1,
     )
 
-# --- Document Formatting ---
-def format_docs(docs) -> str:
-    return "\n\n".join(d.page_content for d in docs)
-
-# ---- Prompt principal ----
-def get_main_prompt_template() -> ChatPromptTemplate:
-    return ChatPromptTemplate.from_messages([
+def analyze_user_intention(user_input: str, chat_history: List[BaseMessage]) -> IntentionResponse:
+    try:
+        llm = make_llm()
+        
+        structured_llm = llm.with_structured_output(IntentionResponse)
+        
+        prompt = ChatPromptTemplate.from_messages([
         ("system",
-         "Tu es Sawa, l'assistant virtuel de l'application Sawa. "
-         "Ta mission est d'aider les personnes à simplifier leurs tâches et à les guider pas à pas. "
-         "Réponds STRICTEMENT à partir du CONTEXTE fourni (issu du fichier de données / base). "
-         "Si l'information n'est pas dans le contexte ou est insuffisante, dis clairement : "
-         "« Je n'ai pas assez d'informations dans le contexte pour répondre. » "
-         "N'invente jamais. "
-         "Analyse soigneusement la question de l'utilisateur et réponds précisément en t'appuyant sur le contexte disponible. "
-         "Assure une continuité de discussion en tenant compte de l'historique (notamment le dernier échange) lorsqu'il est fourni. "
-         "Quand il y a du contexte pertinent, termine toujours par 1–2 questions de suivi pour faciliter la poursuite de l'échange. "
-         "N'utilise PAS de formules de politesse (ex. « Bonjour », « Merci », « Cordialement ») à chaque message : garde un ton respectueux et direct. "
-         "N'emploie des salutations que si l'utilisateur en utilise explicitement ou pour clore définitivement la conversation. "
-         "Ne donne pas d'avis médical personnalisé."
-        ),
+             """Tu es un assistant intelligent qui analyse les intentions des utilisateurs pour l'application SAWA dédiée à l'aidance.
+
+                Ton rôle est de:
+                1. Identifier si le message est une salutation, au revoir, ou question d'identité
+                2. Fournir une réponse directe appropriée OU indiquer que le SAWA agent doit traiter la question
+
+                Pour les SALUTATIONS (bonjour, salut, hello, hi, hey, coucou, salam, bonsoir):
+                - Retourne: type="direct_response", content="Bonjour, comment puis-je vous aider ?"
+
+                Pour les AU REVOIR (au revoir, bonne journée/soirée/nuit, à bientôt, à plus, merci, bye, ciao, tchao):
+                - Retourne: type="direct_response", content="Merci au revoir"
+
+                Pour les QUESTIONS D'IDENTITÉ (vous êtes qui, qui êtes-vous, t'es qui, tu es qui, c'est quoi ce bot):
+                - Retourne: type="direct_response", content="Bonjour, je suis votre SAWACARE AI CareManager, votre assistant intelligent dédié à l'aidance. Je combine technologie et bienveillance pour vous aider à mieux gérer vos responsabilités d'aidant, à trouver rapidement des réponses fiables et à bénéficier d'un accompagnement continu et personnalisé."
+
+                Pour TOUTES LES AUTRES QUESTIONS sur l'aidance, la santé, les soins, etc.:
+                - Retourne: type="sawa_agent", content="[la question de l'utilisateur, reformulée si nécessaire pour être plus claire]"
+
+                IMPORTANT: Tu dois TOUJOURS retourner une structure avec 'type' et 'content'."""),
         MessagesPlaceholder(variable_name="chat_history"),
-        ("human", "Contexte (extraits de la base) :\n{context}\n\nQuestion : {question}")
-    ])
-
-# --- NEW: question rewriter (history-aware) ---
-def build_question_rewriter(model_name: str):
-    llm_local = make_llm(model_name)
-    rewrite_prompt = ChatPromptTemplate.from_messages([
-        ("system",
-         "Tu reformules la dernière question utilisateur en une question autonome, "
-         "en t'appuyant sur l'historique pour lever les pronoms, ellipses et références implicites. "
-         "Si l'historique est vide, renvoie la question telle quelle. "
-         "Réponds UNIQUEMENT par la question réécrite, sans explication."
-        ),
-        MessagesPlaceholder(variable_name="chat_history"),
-        ("human", "{question}")
-    ])
-    return rewrite_prompt | llm_local | StrOutputParser()
-
-# ---- Chaîne RAG (constructeur par modèle pour fallback) ----
-def build_chain_for(model_name: str, retriever):
-    llm_local = make_llm(model_name)
-    rewriter = build_question_rewriter(model_name)
-    prompt_template = get_main_prompt_template()
-
-    # Pipeline:
-    # 1) standalone_q = rewriter(chat_history, question)
-    # 2) context = retriever(standalone_q)
-    # 3) prompt(system + chat_history + human(question, context)) -> llm
-    return (
-        {
-            "question": RunnableLambda(lambda x: x["question"]),
-            "chat_history": RunnableLambda(lambda x: x.get("chat_history", [])),
-        }
-        # standalone_q = rewriter(chat_history, question)
-        | RunnablePassthrough.assign(
-            standalone_q=RunnableLambda(lambda x: {
-                "question": x["question"],
-                "chat_history": x["chat_history"],
-            }) | rewriter
+            ("human", "{user_input}")
+        ])
+        
+        result = (prompt | structured_llm).invoke({
+            "user_input": user_input,
+            "chat_history": chat_history or []
+        })
+        
+        return result
+        
+    except Exception:
+        return IntentionResponse(
+            type="sawa_agent",
+            content=user_input
         )
-        # context = retriever(standalone_q)
-        | RunnablePassthrough.assign(
-            context=RunnableLambda(lambda x: x["standalone_q"]) | retriever | RunnableLambda(format_docs)
-        )
-        # prompt final = system + chat_history + human(question + context)
-        | prompt_template
-        | llm_local
-        | StrOutputParser()
-    )
 
-def generate_with_fallback(payload: Dict, retriever) -> str:
-    """
-    payload: {"question": str, "chat_history": List[BaseMessage]}
-    retriever: Vector database retriever
-    """
-    require_api_key()
-    last_err = None
-    for m in FALLBACK_MODELS:
-        try:
-            chain = build_chain_for(m, retriever)
-            return chain.invoke(payload)
-        except httpx.HTTPStatusError as e:
-            code = e.response.status_code if getattr(e, "response", None) else None
-            # Tente les modèles suivants seulement sur 429/5xx
-            if code in (429, 500, 502, 503, 504):
-                last_err = e
-                continue
-            # Erreurs d'auth/autorisations → message clair
-            if code in (401, 403):
-                raise HTTPException(
-                    status_code=502,
-                    detail="Appel Mistral refusé (401/403). Vérifie la clé API et les droits du modèle."
-                )
-            # Autres erreurs HTTP → propage en 502
-            raise HTTPException(status_code=502, detail=f"Erreur Mistral ({code}).")
-        except Exception as e:
-            # Erreurs réseau/transients : essaie modèle suivant
-            last_err = e
-            continue
-    # Si on a épuisé tous les modèles
-    raise HTTPException(
-        status_code=503,
-        detail="Le service de génération est temporairement indisponible (fallback épuisé)."
-    )
+def sawa_agent(question: str, context_docs: list[str], chat_history: List[BaseMessage]) -> str:
+    try:
+        llm = make_llm()
+        context = "\n\n".join(context_docs) if context_docs else "Aucun contexte pertinent trouvé."
+        
+        prompt = ChatPromptTemplate.from_messages([
+            ("system",
+             "Tu es Sawa, l'assistant virtuel de l'application Sawa dédié à l'aidance. "
+             "Tu as accès aux 5 dernières interactions avec l'utilisateur pour comprendre le contexte de la conversation. "
+             "Utilise cet historique pour:\n"
+             "- Comprendre les références implicites (il, elle, ça, cette situation, etc.)\n"
+             "- Maintenir la continuité de la conversation\n"
+             "- Éviter de répéter des informations déjà données récemment\n"
+             "- Personnaliser tes réponses selon le contexte établi\n\n"
+             "Instructions principales:\n"
+             "- Réponds STRICTEMENT à partir du CONTEXTE fourni\n"
+             "- Si l'information n'est pas suffisante dans le contexte, dis clairement que tu n'as pas assez d'informations\n"
+             "- N'invente jamais d'informations\n"
+             "- Propose 1-2 questions de suivi pertinentes si possible\n"
+             "- Ne donne pas d'avis médical personnalisé\n"
+             "- Utilise l'historique de conversation pour mieux comprendre la question actuelle"
+            ),
+            MessagesPlaceholder(variable_name="chat_history"),
+            ("human", 
+             "Question actuelle: {question}\n\n"
+             "Contexte trouvé dans la base de connaissances:\n{context}"
+            )
+        ])
+        
+        result = (prompt | llm).invoke({
+            "question": question,
+            "context": context,
+            "chat_history": chat_history
+        })
+        return result.content if hasattr(result, 'content') else str(result)
+    except Exception:
+        return "Je rencontre des difficultés techniques pour traiter votre question. Pouvez-vous la reformuler ?"
+
+def process_user_message(user_input: str, retriever, session_id: str = None) -> str:
+    # Step 1: Get chat history from MongoDB
+    chat_history = get_history(session_id, limit=5) if session_id else []
+    
+    # Step 2: Analyze user intention
+    intention_result = analyze_user_intention(user_input, chat_history)
+    
+    # Step 3: Generate response
+    if intention_result.type == "direct_response":
+        print("[DIRECT RESPONSE]")
+        answer = intention_result.content
+    elif intention_result.type == "sawa_agent":
+        print("[SAWA AGENT]")
+        query = intention_result.content
+        context_docs = search_qdrant(query, retriever)
+        print(f"QDRANT RESULT: {context_docs}")
+        answer = sawa_agent(query, context_docs, chat_history)
+    else:
+        answer = "Je ne comprends pas votre demande. Pouvez-vous la reformuler ?"
+    
+    # Step 4: Save interaction to MongoDB
+    if session_id:
+        save_interaction(session_id, user_input, answer)
+    
+    return answer
