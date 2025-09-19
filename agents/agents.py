@@ -74,13 +74,16 @@ def sawa_agent(question: str, context_docs: list[str], chat_history: List[BaseMe
              "- Maintenir la continuité de la conversation\n"
              "- Éviter de répéter des informations déjà données récemment\n"
              "- Personnaliser tes réponses selon le contexte établi\n\n"
-             "Instructions principales:\n"
-             "- Réponds STRICTEMENT à partir du CONTEXTE fourni\n"
-             "- Si l'information n'est pas suffisante dans le contexte, dis clairement que tu n'as pas assez d'informations\n"
-             "- N'invente jamais d'informations\n"
-             "- Propose 1-2 questions de suivi pertinentes si possible\n"
-             "- Ne donne pas d'avis médical personnalisé\n"
-             "- Utilise l'historique de conversation pour mieux comprendre la question actuelle"
+             "RÈGLES STRICTES - TU DOIS LES RESPECTER ABSOLUMENT:\n"
+             "1. RÉPONDS UNIQUEMENT à partir du CONTEXTE fourni et de l'HISTORIQUE de conversation\n"
+             "2. Si le contexte est vide ou insuffisant, dis explicitement : 'Je n'ai pas d'informations suffisantes dans ma base de connaissances pour répondre à cette question.'\n"
+             "3. N'utilise JAMAIS tes connaissances générales ou externes\n"
+             "4. N'invente JAMAIS d'informations\n"
+             "5. Ne fais PAS de suppositions au-delà du contexte fourni\n"
+             "6. Si une partie de la question peut être répondue avec le contexte et une autre non, indique clairement quelle partie tu ne peux pas traiter\n"
+             "7. Propose des questions de suivi UNIQUEMENT si elles sont pertinentes par rapport au contexte disponible\n"
+             "8. Ne donne pas d'avis médical personnalisé\n\n"
+             "Quand tu n'as pas assez d'informations, suggère à l'utilisateur de reformuler sa question ou de consulter un professionnel de santé si nécessaire."
             ),
             MessagesPlaceholder(variable_name="chat_history"),
             ("human", 

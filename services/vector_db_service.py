@@ -3,16 +3,6 @@ import warnings
 import uuid
 from pathlib import Path
 
-# --- CPU ONLY & silence CUDA warnings (doit être AVANT tout import torch/sentence-transformers) ---
-os.environ.setdefault("CUDA_VISIBLE_DEVICES", "")
-warnings.filterwarnings(
-    "ignore",
-    message="CUDA initialization",
-    category=UserWarning,
-    module="torch.cuda",
-)
-
-# --- Imports qui peuvent tirer torch après qu'on ait forcé le CPU ---
 from langchain_mistralai import MistralAIEmbeddings
 from langchain_qdrant import QdrantVectorStore as Qdrant
 from qdrant_client import QdrantClient, models
@@ -22,8 +12,16 @@ from core.config import (
     API_KEY, COLLECTION_NAME, 
     RECREATE_COLLECTION, log, K
 )
+from core.process_data_openai import load_and_chunk_data_with_openai_embeddings
 
-from core.process_data import load_and_chunk_data
+# --- CPU ONLY & silence CUDA warnings (doit être AVANT tout import torch/sentence-transformers) ---
+os.environ.setdefault("CUDA_VISIBLE_DEVICES", "")
+warnings.filterwarnings(
+    "ignore",
+    message="CUDA initialization",
+    category=UserWarning,
+    module="torch.cuda",
+)
 
 _retriever_instance = None
 
@@ -121,7 +119,7 @@ def initialize_vector_db_from_data(json_file_path: str):
         raise FileNotFoundError(f"Fichier introuvable: {json_file_path}")
     
     log(f"[main] Lecture: {json_file_path}")
-    chunks = load_and_chunk_data(str(json_file_path))
+    chunks = load_and_chunk_data_with_openai_embeddings(str(json_file_path))
     log(f"Total chunks prêts à indexer: {len(chunks)}")
 
     vector_db = create_and_save_vector_db(chunks)
