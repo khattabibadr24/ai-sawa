@@ -92,10 +92,11 @@ def sawa_agent(question: str, context_docs: list[str], chat_history: List[BaseMe
         result = (prompt | llm).invoke({
             "question": question,
             "context": context,
-            "chat_history": chat_history
+            "chat_history": chat_history or []
         })
         return result.content if hasattr(result, 'content') else str(result)
-    except Exception:
+    except Exception as e:
+        print(f"ERROR in sawa_agent: {str(e)}")
         return "Je rencontre des difficultés techniques pour traiter votre question. Pouvez-vous la reformuler ?"
 
 def process_user_message(user_input: str, retriever, session_id: str = None) -> str:
@@ -112,8 +113,8 @@ def process_user_message(user_input: str, retriever, session_id: str = None) -> 
     elif intention_result.type == "sawa_agent":
         print("[SAWA AGENT]")
         query = intention_result.content
-        context_docs = search_qdrant(query, retriever)
-        print(f"QDRANT RESULT: {context_docs}")
+        context_docs, doc_count = search_qdrant(query, retriever)
+        print(f"QDRANT RESULT: ({context_docs}, {doc_count})")
         answer = sawa_agent(query, context_docs, chat_history)
     else:
         answer = "Je ne comprends pas votre demande. Pouvez-vous la reformuler ?"
