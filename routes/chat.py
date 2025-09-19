@@ -5,8 +5,8 @@ from fastapi import APIRouter, HTTPException, Query
 from starlette.responses import StreamingResponse
 
 from core.models import ChatRequest, ChatResponse
-from agents.agents import process_user_message
 from services.vector_db_service import get_retriever
+from services.sawa_service import process_user_message
 
 # Initialize router
 router = APIRouter()

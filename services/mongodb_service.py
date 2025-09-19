@@ -60,31 +60,3 @@ class MongoDBHistoryService:
         except Exception as e:
             print(f"Error retrieving history from MongoDB: {e}")
             return []
-
-    def clear_history(self, session_id: str):
-        try:
-            self.db[self.collection_name].delete_many({"session_id": session_id})
-        except Exception as e:
-            print(f"Error clearing history from MongoDB: {e}")
-
-    def get_session_count(self, session_id: str) -> int:
-        try:
-            return self.db[self.collection_name].count_documents({"session_id": session_id})
-        except Exception as e:
-            print(f"Error counting session documents: {e}")
-            return 0
-
-
-# Global instance
-mongodb_service = MongoDBHistoryService()
-
-
-def save_interaction(session_id: str, user_message: str, ai_message: str):
-    if session_id:
-        mongodb_service.save_interaction(session_id, user_message, ai_message)
-
-
-def get_history(session_id: str, limit: int = 5) -> List[BaseMessage]:
-    if not session_id:
-        return []
-    return mongodb_service.get_history(session_id, limit)
