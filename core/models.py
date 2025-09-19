@@ -1,14 +1,9 @@
-from typing import Optional, List, Literal
+from typing import Optional, Literal
 from pydantic import BaseModel, Field
 
-class ChatHistoryItem(BaseModel):
-    role: str
-    content: str
-
 class ChatRequest(BaseModel):
-    question: str
-    chat_history: Optional[List[ChatHistoryItem]] = None
     session_id: Optional[str] = None
+    question: str
 
 class ChatResponse(BaseModel):
     answer: str
@@ -20,4 +15,3 @@ class IntentionResponse(BaseModel):
     content: str = Field(
         description="Either the direct response text or the query for SAWA agent"
     )
-

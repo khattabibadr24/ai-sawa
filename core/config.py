@@ -1,5 +1,4 @@
 import os
-import asyncio
 from pathlib import Path
 from dotenv import load_dotenv
 
@@ -18,7 +17,6 @@ TEMPERATURE = 0.0
 
 # Concurrence & fallback
 MAX_CONCURRENCY = int(os.getenv("MAX_CONCURRENCY", "4"))
-SEMAPHORE = asyncio.Semaphore(MAX_CONCURRENCY)
 FALLBACK_MODELS = [MODEL_NAME, "mistral-small", "mistral-tiny"]
 
 # Fenêtre de mémoire locale (serveur)

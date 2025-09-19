@@ -102,6 +102,7 @@ def sawa_agent(question: str, context_docs: list[str], chat_history: List[BaseMe
 def process_user_message(user_input: str, retriever, session_id: str = None) -> str:
     # Step 1: Get chat history from MongoDB
     chat_history = get_history(session_id, limit=5) if session_id else []
+    print(f"CHAT HISTORY: {chat_history}")
     
     # Step 2: Analyze user intention
     intention_result = analyze_user_intention(user_input, chat_history)

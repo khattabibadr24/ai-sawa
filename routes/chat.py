@@ -4,7 +4,6 @@ import uuid
 from fastapi import APIRouter, HTTPException, Query
 from starlette.responses import StreamingResponse
 
-from core.config import SEMAPHORE
 from core.models import ChatRequest, ChatResponse
 from agents.agents import process_user_message
 from services.vector_db_service import get_retriever
@@ -43,14 +42,12 @@ async def chat_stream(
 
     async def event_gen() -> AsyncGenerator[bytes, None]:
         try:
-            async with SEMAPHORE:
-                # Process message using agent system (handles history retrieval and saving)
-                answer = await process_user_message(q, get_retriever_instance(), session_id)
-                
-                # Stream the response (for now, we'll send it all at once)
-                # TODO: Implement proper streaming with the new agent system
-                yield f"data: {answer}\n\n".encode("utf-8")
-                yield b"data: [DONE]\n\n"
+            answer = process_user_message(q, get_retriever_instance(), session_id)
+            
+            # Stream the response (for now, we'll send it all at once)
+            # TODO: Implement proper streaming with the new agent system
+            yield f"data: {answer}\n\n".encode("utf-8")
+            yield b"data: [DONE]\n\n"
                 
         except Exception as e:
             error_msg = f"Erreur lors du traitement: {str(e)}"
