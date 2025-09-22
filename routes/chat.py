@@ -39,6 +39,7 @@ async def chat_stream(
 
     # Generate session_id if not provided
     session_id = session_id or str(uuid.uuid4())
+    print(f"Session ID: {session_id}")
 
     async def event_gen() -> AsyncGenerator[bytes, None]:
         try:

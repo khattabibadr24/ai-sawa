@@ -10,6 +10,9 @@ load_dotenv(ENV_PATH, override=True)
 # Lis les deux variantes possibles
 API_KEY = os.getenv("API_KEY") or os.getenv("MISTRAL_API_KEY")
 MODEL_NAME = os.getenv("MODEL_NAME", "mistral-small-latest")
+# OpenAI Configuration (replacing Mistral)
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+OPENAI_EMBEDDING_MODEL = os.getenv("OPENAI_EMBEDDING_MODEL", "text-embedding-3-large")
 
 # === Hyperparamètres FIXES ===
 K = 3
