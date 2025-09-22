@@ -3,13 +3,13 @@ import warnings
 import uuid
 from pathlib import Path
 
-from langchain_mistralai import MistralAIEmbeddings
+from langchain_openai import OpenAIEmbeddings
 from langchain_qdrant import QdrantVectorStore as Qdrant
 from qdrant_client import QdrantClient, models
 from qdrant_client.http.exceptions import UnexpectedResponse
 
 from core.config import (
-    API_KEY, COLLECTION_NAME, 
+    OPENAI_API_KEY, OPENAI_EMBEDDING_MODEL, COLLECTION_NAME, 
     RECREATE_COLLECTION, log, K
 )
 from core.process_data_openai import load_and_chunk_data_with_openai_embeddings
@@ -29,7 +29,7 @@ def get_qdrant_client() -> QdrantClient:
     qdrant_url = os.getenv("QDRANT_URL", "http://qdrant:6333")
     return QdrantClient(url=qdrant_url)
 
-def _ensure_collection(client: QdrantClient, embeddings: MistralAIEmbeddings):
+def _ensure_collection(client: QdrantClient, embeddings: OpenAIEmbeddings):
     if RECREATE_COLLECTION and client.collection_exists(collection_name=COLLECTION_NAME):
         log(f"[qdrant] Suppression de la collection existante '{COLLECTION_NAME}' (RECREATE_COLLECTION=1)")
         client.delete_collection(collection_name=COLLECTION_NAME)
@@ -40,7 +40,7 @@ def _ensure_collection(client: QdrantClient, embeddings: MistralAIEmbeddings):
             dim = len(embeddings.embed_query("dimension-check"))
         except Exception as e:
             raise RuntimeError(
-                f"[embeddings] Impossible d'obtenir la dimension (API_KEY invalide ? réseau ?) : {e}"
+                f"[embeddings] Impossible d'obtenir la dimension (OPENAI_API_KEY invalide ? réseau ?) : {e}"
             ) from e
 
         client.create_collection(
@@ -49,7 +49,7 @@ def _ensure_collection(client: QdrantClient, embeddings: MistralAIEmbeddings):
                 size=dim,
                 distance=models.Distance.COSINE
             ),
-            # Optionnels : paramètres d’index
+            # Optionnels : paramètres d'index
             optimizers_config=models.OptimizersConfigDiff(default_segment_number=2),
         )
         log(f"[qdrant] Collection créée: dim={dim}, distance=COSINE")
@@ -57,13 +57,16 @@ def _ensure_collection(client: QdrantClient, embeddings: MistralAIEmbeddings):
         log(f"[qdrant] Collection '{COLLECTION_NAME}' déjà présente.")
 
 def create_and_save_vector_db(chunks):
-    if not API_KEY:
-        raise ValueError("API_KEY non trouvée dans .env (doit contenir la clé Mistral).")
+    if not OPENAI_API_KEY:
+        raise ValueError("OPENAI_API_KEY non trouvée dans .env (doit contenir la clé OpenAI).")
     if not chunks:
         raise ValueError("Aucun chunk à indexer (liste vide).")
 
-    log("[embeddings] Initialisation MistralAIEmbeddings…")
-    embeddings = MistralAIEmbeddings(mistral_api_key=API_KEY, model="mistral-embed")
+    log(f"[embeddings] Initialisation OpenAIEmbeddings avec le modèle: {OPENAI_EMBEDDING_MODEL}")
+    embeddings = OpenAIEmbeddings(
+        openai_api_key=OPENAI_API_KEY,
+        model=OPENAI_EMBEDDING_MODEL
+    )
 
     log("[qdrant] Initialisation client Qdrant…")
     client = get_qdrant_client()
@@ -93,10 +96,14 @@ def create_and_save_vector_db(chunks):
     return vector_db
 
 def load_vector_db():
-    if not API_KEY:
-        raise ValueError("API_KEY non trouvée dans .env (doit contenir la clé Mistral).")
+    if not OPENAI_API_KEY:
+        raise ValueError("OPENAI_API_KEY non trouvée dans .env (doit contenir la clé OpenAI).")
 
-    embeddings = MistralAIEmbeddings(mistral_api_key=API_KEY, model="mistral-embed")
+    log(f"[vectorstore] Chargement avec le modèle d'embedding: {OPENAI_EMBEDDING_MODEL}")
+    embeddings = OpenAIEmbeddings(
+        openai_api_key=OPENAI_API_KEY,
+        model=OPENAI_EMBEDDING_MODEL
+    )
     client = get_qdrant_client()
 
     if not client.collection_exists(collection_name=COLLECTION_NAME):

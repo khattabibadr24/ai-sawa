@@ -92,3 +92,35 @@ medical_chatbot/
 - Gestion de l'historique de conversation pour les 5 derniers messages.
 
 
+
+architecture 
+ai-sawa/
+├── agents/                         # Logique d'agents
+│   └── agents.py
+├── core/                           # Cœur applicatif & pipeline données
+│   ├── config.py                   # Chargement config / .env
+│   ├── models.py                   # Schémas / modèles
+│   ├── process_data.py             # Préparation / nettoyage données
+│   ├── process_data_open.py        # (variante de préparation)
+│   └── tools.py                    # Utilitaires
+├── data/                           # Sources de données
+│   └── medical_data.json
+├── models/
+│   └── qdrant_index/               # Index vectoriel Qdrant
+│       ├── .lock
+│       └── meta.json
+├── routes/                         # Endpoints API
+│   └── chat.py
+├── scripts/                        # Scripts de maintenance
+│   └── init_vector_db.py           # Initialisation de l’index Qdrant
+├── services/                       # Accès aux services externes
+│   ├── mongodb_service.py          # Client MongoDB
+│   └── vector_db_service.py        # Client Qdrant (vecteurs)
+├── .env
+├── .gitignore
+├── docker-compose.yml
+├── Dockerfile
+├── main.py                         # Point d’entrée serveur
+├── README.md
+└── requirements.txt
+
